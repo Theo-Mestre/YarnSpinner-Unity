@@ -5,6 +5,8 @@ Yarn Spinner is licensed to you under the terms found in the file LICENSE.md.
 using UnityEngine;
 using UnityEngine.EventSystems;
 using Yarn.Unity.Attributes;
+using UnityEngine.Events;
+
 
 #if USE_TMP
 using TMPro;
@@ -27,31 +29,33 @@ namespace Yarn.Unity
     /// Represents a single item (so a choice that can be made) in a group of options.
     /// Is used by the <see cref="OptionsPresenter"/> to populate it's UI with choices for the player to make
     /// </summary>
-    public sealed class OptionItem : UnityEngine.UI.Selectable, ISubmitHandler, IPointerClickHandler, IPointerEnterHandler
+    public sealed class OptionItem
+        : UnityEngine.UI.Selectable
+        , ISubmitHandler
+        , IPointerClickHandler
+        , IPointerEnterHandler
+        , IPointerExitHandler
     {
         [MustNotBeNull, SerializeField] TextMeshProUGUI? text;
         [SerializeField] UnityEngine.UI.Image? selectionImage;
 
+        [Group("Appearance"), SerializeField] bool disabledStrikeThrough = true;
+
+        [Header("Callbacks")]
+        [SerializeField] private UnityEvent OnPointerEnterEvent;
+        [SerializeField] private UnityEvent OnPointerExitEvent;
+        [SerializeField] private UnityEvent OnItemDisabled;
+
         /// <summary>
         /// Because the Unity UI is not async aware we use completion sources to create an async behaviour in this class and the others that call into it
         /// </summary>
-        [Group("Appearance"), SerializeField] InternalAppearance normal;
-        [Group("Appearance"), SerializeField] InternalAppearance selected;
-        [Group("Appearance"), SerializeField] InternalAppearance disabled;
-
-        [Group("Appearance"), SerializeField] bool disabledStrikeThrough = true;
-
-        [System.NonSerialized]
-        public YarnTaskCompletionSource<DialogueOption?>? OnOptionSelected;
+        [System.NonSerialized] public YarnTaskCompletionSource<DialogueOption?>? OnOptionSelected;
         /// <summary>
         /// Token provided by the <see cref="OptionsPresenter"/> to control if this content should be cancelled or not.
         /// Will be set cancelled if another option item is chosen.
         /// </summary>
-        [System.NonSerialized]
-        public System.Threading.CancellationToken completionToken;
-
+        [System.NonSerialized] public System.Threading.CancellationToken completionToken;
         private bool hasSubmittedOptionSelection = false;
-
         private DialogueOption? _option;
         /// <summary>
         /// Configures the necessary UI and async machinery of this class when given an option
@@ -90,40 +94,9 @@ namespace Yarn.Unity
                 text.text = line;
                 interactable = value.IsAvailable;
 
-                // we want to apply the default styling to the option item when they are given an option
-                ApplyStyle(normal);
-            }
-        }
-
-        private void ApplyStyle(InternalAppearance style)
-        {
-            Color newColour = style.colour;
-            Sprite newSprite = style.sprite;
-            if (!Option.IsAvailable)
-            {
-                newColour = disabled.colour;
-                newSprite = disabled.sprite;
-            }
-
-            if (text == null)
-            {
-                Debug.LogWarning($"The {nameof(text)} is null, is it not connected in the inspector?", this);
-                return;
-            }
-
-            text.color = newColour;
-
-            if (selectionImage != null)
-            {
-                selectionImage.color = newColour;
-                if (newSprite != null)
+                if (interactable == false)
                 {
-                    selectionImage.sprite = newSprite;
-                    selectionImage.gameObject.SetActive(true);
-                }
-                else
-                {
-                    selectionImage.gameObject.SetActive(false);
+                    OnItemDisabled?.Invoke();
                 }
             }
         }
@@ -132,16 +105,12 @@ namespace Yarn.Unity
         public override void OnSelect(BaseEventData eventData)
         {
             base.OnSelect(eventData);
-
-            ApplyStyle(selected);
         }
 
         /// <inheritdoc />
         public override void OnDeselect(BaseEventData eventData)
         {
             base.OnDeselect(eventData);
-
-            ApplyStyle(normal);
         }
 
         /// <summary>
@@ -199,6 +168,12 @@ namespace Yarn.Unity
         public override void OnPointerEnter(PointerEventData eventData)
         {
             base.Select();
+            OnPointerEnterEvent?.Invoke();
+        }
+
+        public override void OnPointerExit(PointerEventData eventData)
+        {
+            OnPointerExitEvent?.Invoke();
         }
     }
 }
